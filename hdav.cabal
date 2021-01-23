@@ -40,6 +40,7 @@ common common-options
 
   default-language:    Haskell2010
   default-extensions:  AllowAmbiguousTypes
+                       ApplicativeDo
                        BangPatterns
                        ConstraintKinds
                        DataKinds
@@ -94,9 +95,11 @@ executable hdav
                      , filepath
                      , http-client
                      , lens
+                     , optparse-applicative
                      , process
                      , string-conversions
                      , text
+                     , uri-bytestring
                      , wreq
                      , xml-conduit
                      , xml-hamlet
