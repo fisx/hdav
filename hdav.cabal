@@ -1,7 +1,7 @@
 cabal-version:       2.4
 name:                hdav
-version:             0.0.0.0
-synopsis:            See README for more info
+version:             0.1
+synopsis:            WebDAV/CardDAV/CalDAV library and cli tool(s)
 description:         See README for more info
 homepage:            https://github.com/fisx/hdav
 bug-reports:         https://github.com/fisx/hdav/issues
@@ -21,8 +21,8 @@ source-repository head
   location:            https://github.com/fisx/hdav.git
 
 common common-options
-  build-depends:       base ^>= 4.13.0.0
-  
+  build-depends:       base
+
   ghc-options:         -Wall
                        -Wcompat
                        -Widentities
@@ -54,13 +54,13 @@ common common-options
                        FlexibleInstances
                        FunctionalDependencies
                        GADTs
+                       GeneralizedNewtypeDeriving
                        InstanceSigs
                        KindSignatures
                        LambdaCase
                        MultiParamTypeClasses
                        MultiWayIf
                        NamedFieldPuns
-                       NoImplicitPrelude
                        OverloadedStrings
                        PackageImports
                        PatternSynonyms
@@ -88,7 +88,18 @@ executable hdav
   import:              common-options
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       hdav
+  build-depends:       base
+                     , containers
+                     , directory
+                     , filepath
+                     , http-client
+                     , lens
+                     , process
+                     , string-conversions
+                     , text
+                     , wreq
+                     , xml-conduit
+                     , xml-hamlet
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
