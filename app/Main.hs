@@ -8,8 +8,10 @@ import Control.Lens (makeLenses, to, (%~), (&), (.~), (<&>), (?~), (^.))
 import Control.Monad (unless)
 import Data.Bifunctor (first)
 import Data.List as List
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.String (IsString)
 import Data.String.Conversions (cs)
@@ -42,6 +44,7 @@ import Options.Applicative.Types (Parser)
 import System.Directory (getDirectoryContents)
 import System.Environment
 import System.FilePath
+import System.IO (stderr)
 import System.Process
 import Text.Hamlet.XML as XML
 import Text.XML as XML
@@ -66,7 +69,7 @@ data CouldNotParseCredentials = CouldNotParseCredentials ([[Text]], [[Text]])
 
 instance Exception CouldNotParseCredentials
 
-data VCard = VCard {_vcUrl :: Text, _vcFileName :: FilePath, _vcEtag :: Text, _vcCard :: Text}
+data VCard = VCard {_vcUrlPath :: Text, _vcFileName :: FilePath, _vcEtag :: Text, _vcCard :: Text}
   deriving (Eq, Ord, Show)
 
 newtype AddressBook = AddressBook {unAddressBook :: Set.Set VCard}
@@ -127,8 +130,8 @@ parseAddressBook doc = parseDoc $ XML.fromDocument doc
         nonnull "" = error $ show cursor
         nonnull good = good
 
-        _vcUrl = nonnull . mconcat $ (cursor $/ XML.element "{DAV:}href" &/ XML.content)
-        _vcFileName = cs . nonnull . cs . takeFileName . cs $ _vcUrl
+        _vcUrlPath = nonnull . mconcat $ (cursor $/ XML.element "{DAV:}href" &/ XML.content)
+        _vcFileName = cs . nonnull . cs . takeFileName . cs $ _vcUrlPath
         _vcEtag =
           nonnull . mconcat $
             ( cursor $/ XML.element "{DAV:}propstat"
@@ -143,6 +146,21 @@ parseAddressBook doc = parseDoc $ XML.fromDocument doc
                 &/ XML.element "{urn:ietf:params:xml:ns:carddav}address-data"
                 &/ XML.content
             )
+
+putVCard :: HasCallStack => Credentials -> URI -> VCard -> IO ()
+putVCard creds url vcard = do
+  let options =
+        W.defaults
+          & (W.headers %~ (<> [("If-Match", cs $ vcard ^. vcEtag)]))
+          & (W.auth ?~ W.basicAuth (cs $ creds ^. credLogin) (cs $ creds ^. credPassword))
+  resp <-
+    W.customPayloadMethodWith
+      "PUT"
+      options
+      (cs $ URI.serializeURIRef' url)
+      (W.Raw "text/vcard; charset=utf-8" (H.RequestBodyLBS (cs (vcard ^. vcCard))))
+  unless (resp ^. W.responseStatus . W.statusCode < 400) $ do
+    error $ "could not update vcard: " <> show resp
 
 saveAddressBook :: HasCallStack => FilePath -> AddressBook -> IO ()
 saveAddressBook dir = mapM_ (saveVCard dir) . Set.toList . unAddressBook
@@ -159,7 +177,7 @@ loadAddressBook addrBookURL dir = do
 
 loadVCard :: HasCallStack => String -> FilePath -> FilePath -> IO VCard
 loadVCard addrBookURL addrBookDir _vcFileName = do
-  let _vcUrl = cs $ addrBookURL </> _vcFileName
+  let _vcUrlPath = cs $ addrBookURL </> _vcFileName
   _vcCard <- Text.readFile (addrBookDir </> _vcFileName)
   _vcEtag <- Text.readFile (addrBookDir </> takeBaseName _vcFileName <.> "etag")
   pure $ VCard {..}
@@ -232,7 +250,10 @@ parseCmd =
       ]
 
 cliAddressBookUrl :: Parser URI
-cliAddressBookUrl = argument (eitherReader (first show . URI.parseURI URI.strictURIParserOptions . cs)) (metavar "URI")
+cliAddressBookUrl = argument (eitherReader (\raw -> first (mkerr raw) $ prs raw)) (metavar "URI")
+  where
+    prs = URI.parseURI URI.strictURIParserOptions . cs
+    mkerr raw err = "could not parse URI: " <> show (raw, err)
 
 cliAddressBookDir :: Parser FilePath
 cliAddressBookDir = argument str (metavar "FilePath")
@@ -257,5 +278,24 @@ doGetContacts creds url dir = do
     error "saveAddressBook / loadAddressBook failed roundtrip check."
 
 doPutContacts :: Credentials -> FilePath -> URI -> IO ()
-doPutContacts _creds _dir _url = do
-  error "not implemented."
+doPutContacts creds dir url =
+  do
+    vcardsFromDir :: [VCard] <-
+      loadAddressBook (url ^. URI.pathL . to cs) dir <&> (Set.toList . unAddressBook)
+
+    let setToMap :: Ord k => (a -> k) -> Set a -> Map k a
+        setToMap mkKey = Map.fromList . fmap (\a -> (mkKey a, a)) . Set.toList
+    vcardsFromUrl :: Map Text VCard <-
+      getAddressBook creds url <&> (setToMap (^. vcEtag) . unAddressBook)
+
+    let go :: VCard -> IO ()
+        go vcard = do
+          Map.lookup (vcard ^. vcEtag) vcardsFromUrl & \case
+            Nothing -> do
+              hPutStrLn stderr $ "sending " <> cs (vcard ^. vcFileName) <> "."
+              putVCard creds (url & URI.pathL .~ cs (vcard ^. vcUrlPath)) vcard
+            Just _ -> pure ()
+    go `mapM_` vcardsFromDir
+
+    -- store data from server, including etags and possible mutations.
+    doGetContacts creds url dir
