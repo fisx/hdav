@@ -24,12 +24,11 @@ common common-options
   build-depends:       base
 
   ghc-options:         -Wall
+                       -Werror
                        -Wcompat
                        -Widentities
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
-  if impl(ghc >= 8.0)
-    ghc-options:       -Wredundant-constraints
   if impl(ghc >= 8.2)
     ghc-options:       -fhide-source-paths
   if impl(ghc >= 8.4)
@@ -83,19 +82,14 @@ common common-options
 library
   import:              common-options
   hs-source-dirs:      src
-  exposed-modules:     Hdav
-
-executable hdav
-  import:              common-options
-  hs-source-dirs:      app
-  main-is:             Main.hs
+  exposed-modules:     Network.DAV.Card,
+                       Network.DAV.Util
   build-depends:       base
                      , containers
                      , directory
                      , filepath
                      , http-client
                      , lens
-                     , optparse-applicative
                      , process
                      , string-conversions
                      , text
@@ -103,6 +97,17 @@ executable hdav
                      , wreq
                      , xml-conduit
                      , xml-hamlet
+
+executable hdav
+  import:              common-options
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  build-depends:       base
+                     , hdav
+                     , optparse-applicative
+                     , string-conversions
+                     , text
+                     , uri-bytestring
   ghc-options:         -threaded
                        -rtsopts
                        -with-rtsopts=-N
