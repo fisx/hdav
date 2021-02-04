@@ -20,7 +20,7 @@ where
 
 import Control.Lens (makeLenses, to, (%~), (&), (.~), (<&>), (?~), (^.))
 import Control.Monad (unless)
-import Data.List as List
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -28,7 +28,7 @@ import qualified Data.Set as Set
 import Data.String.Conversions (cs)
 import Data.Text as Text
 import Data.Text.IO as Text
-import GHC.Stack
+import GHC.Stack (HasCallStack)
 import Network.DAV.Util
 import qualified Network.HTTP.Client as H
 import qualified Network.Wreq as W
@@ -47,10 +47,10 @@ import qualified URI.ByteString as URI
 -- types
 
 data VCard = VCard {_vcUrlPath :: Text, _vcFileName :: FilePath, _vcEtag :: Text, _vcCard :: Text}
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Read)
 
 newtype AddressBook = AddressBook {unAddressBook :: Set.Set VCard}
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Read)
 
 makeLenses ''VCard
 
@@ -117,11 +117,12 @@ parseAddressBook doc = parseDoc $ XML.fromDocument doc
 ----------------------------------------------------------------------
 -- putVCard
 
-putVCard :: HasCallStack => Credentials -> URI -> VCard -> IO ()
-putVCard creds url vcard = do
+-- | @setIfMatchHeader == True@ means update; @setIfMatchHeader == False@ means create.
+putVCard :: HasCallStack => Bool -> Credentials -> URI -> VCard -> IO ()
+putVCard setIfMatchHeader creds url vcard = do
   let options =
         W.defaults
-          & (W.headers %~ (<> [("If-Match", cs $ vcard ^. vcEtag)]))
+          & (W.headers %~ (<> [("If-Match", cs $ vcard ^. vcEtag) | setIfMatchHeader]))
           & (W.auth ?~ W.basicAuth (cs $ creds ^. credLogin) (cs $ creds ^. credPassword))
   resp <-
     W.customPayloadMethodWith
@@ -160,6 +161,7 @@ loadVCard addrBookURL addrBookDir _vcFileName = do
 
 doGetContacts :: Credentials -> URI -> FilePath -> IO ()
 doGetContacts creds url dir = do
+  system $ "rm -rf " <> show dir
   system $ "mkdir -p " <> show dir
   vcardsFromUrl <- getAddressBook creds url
   saveAddressBook dir vcardsFromUrl
@@ -168,24 +170,34 @@ doGetContacts creds url dir = do
     error "saveAddressBook / loadAddressBook failed roundtrip check."
 
 doPutContacts :: Credentials -> FilePath -> URI -> IO ()
-doPutContacts creds dir url =
-  do
-    vcardsFromDir :: [VCard] <-
-      loadAddressBook (url ^. URI.pathL . to cs) dir <&> (Set.toList . unAddressBook)
+doPutContacts creds dir url = do
+  -- local address data
+  vcardsFromDir :: [VCard] <-
+    loadAddressBook (url ^. URI.pathL . to cs) dir <&> (Set.toList . unAddressBook)
 
-    let setToMap :: Ord k => (a -> k) -> Set a -> Map k a
-        setToMap mkKey = Map.fromList . fmap (\a -> (mkKey a, a)) . Set.toList
-    vcardsFromUrl :: Map Text VCard <-
-      getAddressBook creds url <&> (setToMap (^. vcEtag) . unAddressBook)
+  -- remote address data
+  let setToMap :: Ord k => (a -> k) -> Set a -> Map k a
+      setToMap mkKey = Map.fromList . fmap (\a -> (mkKey a, a)) . Set.toList
+  vcardsFromUrl :: Map Text VCard <-
+    getAddressBook creds url <&> (setToMap (^. vcUrlPath) . unAddressBook)
 
-    let go :: VCard -> IO ()
-        go vcard = do
-          Map.lookup (vcard ^. vcEtag) vcardsFromUrl & \case
-            Nothing -> do
-              hPutStrLn stderr $ "sending " <> cs (vcard ^. vcFileName) <> "."
-              putVCard creds (url & URI.pathL .~ cs (vcard ^. vcUrlPath)) vcard
-            Just _ -> pure ()
-    go `mapM_` vcardsFromDir
+  -- sync one entry
+  let go :: VCard -> IO ()
+      go vcard = do
+        Map.lookup (vcard ^. vcUrlPath) vcardsFromUrl & \case
+          Nothing -> upd "updating" True
+          Just vcard' ->
+            if vcard ^. vcEtag /= vcard' ^. vcEtag
+              then upd "creating" False
+              else pure ()
+        where
+          upd :: Text -> Bool -> IO ()
+          upd typmsg typbool = do
+            hPutStrLn stderr $ typmsg <> " remote " <> cs (vcard ^. vcFileName) <> "."
+            putVCard typbool creds (url & URI.pathL .~ cs (vcard ^. vcUrlPath)) vcard
 
-    -- store data from server, including etags and possible mutations.
-    doGetContacts creds url dir
+  -- iterate over all entries
+  go `mapM_` vcardsFromDir
+
+  -- download data from server, including etags and possible mutations.
+  doGetContacts creds url dir
