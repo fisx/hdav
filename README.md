@@ -22,12 +22,15 @@ even a goal (yet).
 There is also [DAV](http://hackage.haskell.org/package/DAV), which is
 more mature than this code, but not very mature either, and hacking
 the things that are missing into the existing code there was less fun
-than trying our my own approach.
+than trying my own approach.
 
 ## resources
 
 - [WebDAV rfc](https://tools.ietf.org/html/rfc4918)
 - [CardDAV rfc](https://tools.ietf.org/html/rfc6352)
 - [CalDAV rfc](https://tools.ietf.org/html/rfc4791)
+- [vCard rfc](https://datatracker.ietf.org/doc/html/rfc2426)
 - [cool CardDAV tutorial](https://sabre.io/dav/building-a-carddav-client/)
+- [cool CalDAV tutorial](https://sabre.io/dav/building-a-caldav-client/)
 - [DAV](http://hackage.haskell.org/package/DAV) (another haskell library and cli tool; I stole a lot from that)
+- [calendly](https://calendly.com/) (closed-source calendar app with nice features and nice UI)
