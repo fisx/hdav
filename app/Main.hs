@@ -8,6 +8,7 @@ import Data.Maybe (fromMaybe)
 import Data.String (IsString)
 import Data.String.Conversions (cs)
 import Data.Text as Text
+import Network.DAV.Cal
 import Network.DAV.Card
 import Network.DAV.Util
 import Options.Applicative.Builder
@@ -41,6 +42,8 @@ data CliCtx = CliCtx
 data Command
   = GetContacts URI FilePath
   | PutContacts FilePath URI
+  | TestContacts URI
+  | GetCalendar URI FilePath
   deriving stock (Eq, Show)
 
 parseCliCtx :: FilePath -> Parser CliCtx
@@ -92,15 +95,32 @@ parseCmd =
                   \those that do not exist on the server, or exist, but have different etags \
                   \locally and remotely."
               )
+          ),
+        command
+          "test-contacts"
+          ( info
+              (TestContacts <$> cliAddressBookUrl)
+              ( progDesc
+                  "`addressbookUrl` must point to an address book that will be used for CRUDding \
+                  \VCards.  Any data in that address book will be destroyed."
+              )
+          ),
+        command
+          "get-calendar"
+          ( info
+              (GetCalendar <$> cliAddressBookUrl <*> cliAddressBookDir)
+              (progDesc "you know...")
           )
       ]
 
+-- TODO: rename to `parseCliUrl`?
 cliAddressBookUrl :: Parser URI
 cliAddressBookUrl = argument (eitherReader (\raw -> first (mkerr raw) $ prs raw)) (metavar "URI")
   where
     prs = URI.parseURI URI.strictURIParserOptions . cs
     mkerr raw err = "could not parse URI: " <> show (raw, err)
 
+-- TODO: rename to `parseFileOrDirPath`?
 cliAddressBookDir :: Parser FilePath
 cliAddressBookDir = argument str (metavar "FilePath")
 
@@ -113,3 +133,5 @@ main = do
   case cliCommand ctx of
     GetContacts url dir -> doGetContacts creds url dir
     PutContacts dir url -> doPutContacts creds dir url
+    TestContacts url -> doTestContacts creds url
+    GetCalendar url dir -> doGetCalendar creds url dir

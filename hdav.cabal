@@ -3,10 +3,10 @@ name:            hdav
 version:         0.1
 license:         AGPL-3.0-only
 license-file:    LICENSE
-copyright:       2021 Matthias Fischmann
+copyright:       2022 Matthias Fischmann
 maintainer:      Matthias Fischmann <mf@zerobuzz.net>
 author:          Matthias Fischmann
-tested-with:     ghc ==8.10.3
+tested-with:     ghc ==8.10.7
 homepage:        https://github.com/fisx/hdav
 bug-reports:     https://github.com/fisx/hdav/issues
 synopsis:        WebDAV/CardDAV/CalDAV library and cli tool(s)
@@ -23,6 +23,10 @@ source-repository head
 
 library
     exposed-modules:
+        Data.DAV.Class
+        Data.DAV.Util
+        Data.DAV.Value
+        Network.DAV.Cal
         Network.DAV.Card
         Network.DAV.Util
 
@@ -47,17 +51,25 @@ library
 
     build-depends:
         base >=4.14.1.0 && <4.15,
+        bytestring >=0.8 && <0.11,
+        case-insensitive >=1.2.0.0 && <1.3,
         containers >=0.6.2.1 && <0.7,
         directory >=1.3.6.0 && <1.4,
         filepath >=1.4.2.1 && <1.5,
-        http-client >=0.7.4 && <0.8,
+        http-client >=0.6.4.1 && <0.8,
         lens >=4.19.2 && <4.20,
+        megaparsec >=8.0.0 && <10,
+        mtl >=2.1 && <2.3,
         process >=1.6.9.0 && <1.7,
+        QuickCheck >=2.10 && <2.15,
         string-conversions >=0.4.0.1 && <0.5,
+        temporary >=1.0 && <1.4,
         text >=1.2.4.1 && <1.3,
+        time >=1.9 && <1.10,
         uri-bytestring >=0.3.3.0 && <0.4,
+        uuid >=1.3.0 && <1.4,
         wreq >=0.5.3.2 && <0.6,
-        xml-conduit >=1.8.0.1 && <1.9,
+        xml-conduit >=1.8.0.1 && <1.10,
         xml-hamlet >=0.5.0.1 && <0.6
 
     if impl(ghc >=8.2)
@@ -106,3 +118,41 @@ executable hdav
 
     if impl(ghc >=8.8)
         ghc-options: -Wmissing-deriving-strategies
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Samples
+      Test.Data.DAV.ValueSpec
+      Test.Data.DAV.UtilSpec
+  hs-source-dirs:
+      test
+  default-extensions:
+        AllowAmbiguousTypes ApplicativeDo BangPatterns ConstraintKinds
+        DataKinds DefaultSignatures DeriveFunctor DeriveGeneric DeriveLift
+        DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts
+        FlexibleInstances FunctionalDependencies GADTs
+        GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase
+        MultiParamTypeClasses MultiWayIf NamedFieldPuns OverloadedStrings
+        PackageImports PatternSynonyms PolyKinds QuasiQuotes RankNTypes
+        RecordWildCards ScopedTypeVariables StandaloneDeriving
+        TemplateHaskell TupleSections TypeApplications TypeFamilies
+        TypeFamilyDependencies TypeOperators UndecidableInstances
+        ViewPatterns
+  ghc-options: -O2 -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -Wpartial-fields -fwarn-tabs -optP-Wno-nonportable-include-path -j -Wno-redundant-constraints -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+        base,
+        containers,
+        hdav,
+        hspec,
+        lens,
+        megaparsec,
+        QuickCheck,
+        string-conversions,
+        text,
+        time,
+        uuid
+  default-language: Haskell2010
